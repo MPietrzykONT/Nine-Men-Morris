@@ -2,6 +2,7 @@ classdef boardNMMClass
     properties
         BoardState % 2D array representing the game board
         BoardFigure % Board figure handle
+        BoardPlot % Board plot handle
         Player1Pieces % Array to hold Player 1's pieces
         Player2Pieces % Array to hold Player 2's pieces
         CurrentTurn % Indicates whose turn it is (1 or 2)
@@ -11,6 +12,7 @@ classdef boardNMMClass
         AllowedPositions % Allowed positions for placing and moving pieces
         MoveX % Clicked X coordinate
         MoveY % Clicked Y coordinate
+        isGameOver % Check if game is still going on
     end
 
     methods
@@ -21,24 +23,28 @@ classdef boardNMMClass
             obj.CurrentTurn = 1; % Start with Player 1
             obj.Score = [0, 0]; % Initialize scores
             obj.Phase = 1; % Start in the placing phase
+            obj.isGameOver = false; % Game is running
 
             % Define allowed positions
             obj.AllowedPositions = [1, 1; 1, 4; 1, 7; 4, 1; 4, 7; 7, 1; 7, 4; 7, 7;
-                                    2, 2; 2, 4; 2, 6; 4, 2; 4, 6; 6, 2; 6, 4; 6, 6;
-                                    3, 3; 3, 4; 3, 5; 4, 3; 4, 5; 5, 3; 5, 4; 5, 5];
+                                                 2, 2; 2, 4; 2, 6; 4, 2; 4, 6; 6, 2; 6, 4; 6, 6;
+                                                 3, 3; 3, 4; 3, 5; 4, 3; 4, 5; 5, 3; 5, 4; 5, 5];
 
             obj = obj.initialDraw(); % Initiate the visualization
-            obj = obj.gameRun();
         end
 
         %% Main game function that runs the game
         function obj = gameRun(obj)
-            if obj.Phase == 1
-                waitforbuttonpress;
-                obj.placePiece(obj.MoveX,obj.MoveY);
-            elseif obj.Phase == 2
-                waitforbuttonpress;
-                obj.makeMove(obj.MoveX,obj.MoveY);
+            if ~obj.isGameOver % While game is not over
+                if obj.Phase == 1 % Phase 1 is placing pieces
+                    obj = obj.placePiece(obj.MoveX,obj.MoveY); % Place the piece
+                elseif obj.Phase == 2 % Phase 2 is movement
+                    obj = obj.makeMove(obj.MoveX,obj.MoveY);
+                end
+                obj = obj.refreshBoard();
+            else
+                displayScore(obj)
+                obj.resetGame();
             end
         end
         
@@ -50,10 +56,10 @@ classdef boardNMMClass
                     if obj.BoardState(row, col) == 0 % Check if the cell is empty
                         if obj.CurrentTurn == 1 && sum(obj.Player1Pieces) <= obj.MaxPieces
                             obj.BoardState(row, col) = obj.CurrentTurn; % Place Player 1's piece
-                            obj.Player1Pieces(pieceIndex) = 1; % Mark piece as used
+                            obj.Player1Pieces(sum(obj.Player1Pieces)+1) = 1; % Mark piece as used
                         elseif obj.CurrentTurn == 2 && sum(obj.Player2Pieces) <= obj.MaxPieces
                             obj.BoardState(row, col) = obj.CurrentTurn; % Place Player 2's piece
-                            obj.Player2Pieces(pieceIndex) = 1; % Mark piece as used
+                            obj.Player2Pieces(sum(obj.Player2Pieces)+1) = 1; % Mark piece as used
                         else
                             error('All pieces have been placed.');
                         end
@@ -63,6 +69,13 @@ classdef boardNMMClass
                 else
                     error('Invalid position. Choose from allowed positions.');
                 end
+                
+                % Check if the current player has formed a mill
+                if obj.checkForMill(obj.CurrentTurn)
+                    % Prompt the player to remove an opponent's piece
+                    obj = obj.removeOpponentPiece();
+                end
+
                 % Check for end of phase
                 pieces = sum(obj.Player1Pieces) + sum(obj.Player2Pieces);
                 if pieces == obj.MaxPieces*2
@@ -72,7 +85,6 @@ classdef boardNMMClass
             else
                 error('Invalid game phase.');
             end
-            obj = obj.refreshBoard();
             % Switch turns
             obj.CurrentTurn = 3 - obj.CurrentTurn; 
         end
@@ -132,9 +144,7 @@ classdef boardNMMClass
                 end
             else
                 error('Invalid game phase.');
-            end
-            % Refresh board
-            obj = obj.refreshBoard();
+           end
             % Switch turns
             obj.CurrentTurn = 3 - obj.CurrentTurn; 
        end
@@ -156,20 +166,13 @@ classdef boardNMMClass
 
         function obj = removeOpponentPiece(obj)
             % Get the positions of the opponent's pieces
-            opponentPieces = find(obj.BoardState == 3 - obj.CurrentTurn); % Assuming 1 and 2 are players
-           if isempty(opponentPieces)
+            opponentPieces = ~find(obj.BoardState == 3 - obj.CurrentTurn && obj.BoardState == 0); % Assuming 1 and 2 are players
+            if isempty(opponentPieces)
                 disp('No opponent pieces to remove.');
                 return; % No pieces to remove
             end
-
-            % Display opponent's pieces
-            fprintf('Opponent pieces at positions:\n');
-            for i = 1:length(opponentPieces)
-                [row, col] = ind2sub(size(obj.BoardState), opponentPieces(i));
-                fprintf('Piece %d: Row %d, Column %d\n', i, row, col);
-            end
         
-            % Loop until a valid index is selected
+            % Loop until a valid piece is selected
             validSelection = false;
             while ~validSelection
                 pieceIndex = input('Select the index of the piece to remove: ');
@@ -192,7 +195,6 @@ classdef boardNMMClass
             % Notify the player
             fprintf('Removed opponent piece at Row %d, Column %d.\n', removeRow, removeCol);
         end
-
 
         function valid = isValidMove(startRow, startCol, targetRow, targetCol)
             % Define adjacency for each position
@@ -235,15 +237,6 @@ classdef boardNMMClass
             end
         end
 
-        function obj = endPlacingPhase(obj)
-            % Transition to moving phase
-            if sum(obj.Player1Pieces) == obj.MaxPieces && sum(obj.Player2Pieces) == obj.MaxPieces
-                obj.Phase = 2; % Change to moving phase
-            else
-                error('Both players must place all their pieces before moving.');
-            end
-        end
-
         function obj = updateScore(obj)
             % Example scoring logic (modify as needed)
             obj.Score(obj.CurrentTurn) = obj.Score(obj.CurrentTurn) + 1;
@@ -258,26 +251,26 @@ classdef boardNMMClass
 
             % Draw the positions
             for i = 1:size(positions, 1)
-                plot(positions(i, 1), positions(i, 2), 'ko', 'MarkerSize', 20, 'MarkerFaceColor', '#808080','ButtonDownFcn',@(src,event) obj.onClick(src,event,positions(i,1),positions(i,2)));
+                obj.BoardPlot = plot(positions(i, 1), positions(i, 2), 'ko', 'MarkerSize', 20, 'MarkerFaceColor', '#808080','ButtonDownFcn',@(src,event,obj) obj.onClick(src,event,obj));
             end
             
             % Draw the lines connecting the points
             lineCoordinatesX = [1, 1, 7, 7, 1];
             lineCoordinatesY = [1, 7, 7, 1, 1];
-            line(lineCoordinatesX,lineCoordinatesY,'Color','w');
+            obj.BoardPlot = line(lineCoordinatesX,lineCoordinatesY,'Color','w');
             
             lineCoordinatesX = [2, 2, 6, 6, 2];
             lineCoordinatesY = [2, 6, 6, 2, 2];
-            line(lineCoordinatesX,lineCoordinatesY,'Color','w');
+            obj.BoardPlot = line(lineCoordinatesX,lineCoordinatesY,'Color','w');
             
             lineCoordinatesX = [3, 3, 5, 5, 3];
             lineCoordinatesY = [3, 5, 5, 3, 3];
-            line(lineCoordinatesX,lineCoordinatesY,'Color','w');
+            obj.BoardPlot = line(lineCoordinatesX,lineCoordinatesY,'Color','w');
             
             % Connecting lines
             lineCoordinatesX = [3, 1, 1, 4, 4, 5, 5, 7, 7, 4, 4];
             lineCoordinatesY = [4, 4, 1, 1, 3, 3, 4, 4, 7, 7, 5];
-            line(lineCoordinatesX,lineCoordinatesY,'Color','w');
+            obj.BoardPlot = line(lineCoordinatesX,lineCoordinatesY,'Color','w');
             
             hold off
 
@@ -296,9 +289,9 @@ classdef boardNMMClass
             for row = 1:size(obj.BoardState, 1)
                 for col = 1:size(obj.BoardState, 2)
                     if obj.BoardState(row, col) == 1
-                        plot(row, col, 'ro', 'MarkerSize', 20, 'MarkerFaceColor', 'r'); % Player 1's piece
+                        obj.BoardPlot = plot(row, col, 'ro', 'MarkerSize', 20, 'MarkerFaceColor', 'r'); % Player 1's piece
                     elseif obj.BoardState(row, col) == 2
-                        plot(row, col, 'bo', 'MarkerSize', 20, 'MarkerFaceColor', 'b'); % Player 2's piece
+                        obj.BoardPlot = plot(row, col, 'bo', 'MarkerSize', 20, 'MarkerFaceColor', 'b'); % Player 2's piece
                     end
                 end
             end
@@ -325,9 +318,10 @@ classdef boardNMMClass
             fprintf('Player 2 Score: %d\n', obj.Score(2));
         end
 
-        function obj = onClick(obj, ~, ~, xCoord, yCoord)
-            obj.MoveX = xCoord;
-            obj.MoveY = yCoord;
+        function onClick(obj, src, ~)
+            obj.MoveX = src.XData;
+            obj.MoveY = src.YData;
+            obj.gameRun();
         end
     end
 end

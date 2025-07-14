@@ -1,4 +1,4 @@
-classdef boardNMMClass
+classdef boardNMMClass < handle
     properties
         BoardState % 2D array representing the game board
         BoardFigure % Board figure handle
@@ -38,6 +38,19 @@ classdef boardNMMClass
             if ~obj.isGameOver % While game is not over
                 if obj.Phase == 1 % Phase 1 is placing pieces
                     obj = obj.placePiece(obj.MoveX,obj.MoveY); % Place the piece
+                   
+                    % Check if the current player has formed a mill
+                    if obj.checkForMill(obj.CurrentTurn)
+                        % Prompt the player to remove an opponent's piece
+                        obj = obj.removeOpponentPiece();
+                    end
+    
+                    % Check for end of phase
+                    pieces = sum(obj.Player1Pieces) + sum(obj.Player2Pieces);
+                    if pieces == obj.MaxPieces*2
+                        obj.Phase = 2; % Switch to moving phase
+                        disp('All pieces have been placed. Now entering the moving phase.');
+                    end
                 elseif obj.Phase == 2 % Phase 2 is movement
                     obj = obj.makeMove(obj.MoveX,obj.MoveY);
                 end
@@ -69,24 +82,12 @@ classdef boardNMMClass
                 else
                     error('Invalid position. Choose from allowed positions.');
                 end
-                
-                % Check if the current player has formed a mill
-                if obj.checkForMill(obj.CurrentTurn)
-                    % Prompt the player to remove an opponent's piece
-                    obj = obj.removeOpponentPiece();
-                end
-
-                % Check for end of phase
-                pieces = sum(obj.Player1Pieces) + sum(obj.Player2Pieces);
-                if pieces == obj.MaxPieces*2
-                    obj.Phase = 2; % Switch to moving phase
-                    disp('All pieces have been placed. Now entering the moving phase.');
-                end
             else
                 error('Invalid game phase.');
             end
             % Switch turns
-            obj.CurrentTurn = 3 - obj.CurrentTurn; 
+            obj.CurrentTurn = 3 - obj.CurrentTurn;
+            obj = obj.refreshBoard();
         end
         
         %% Making moves
@@ -165,8 +166,9 @@ classdef boardNMMClass
         end
 
         function obj = removeOpponentPiece(obj)
-            % Get the positions of the opponent's pieces
-            opponentPieces = ~find(obj.BoardState == 3 - obj.CurrentTurn && obj.BoardState == 0); % Assuming 1 and 2 are players
+            % Get the positions of the opponent's pieces assuming 1 and 2
+            % in BoardState are player pieces
+            opponentPieces = find(obj.BoardState == 3 - obj.CurrentTurn); 
             if isempty(opponentPieces)
                 disp('No opponent pieces to remove.');
                 return; % No pieces to remove
@@ -247,12 +249,9 @@ classdef boardNMMClass
             obj.BoardFigure.Name="Nine Man's Morris";
             
             hold on
-            positions = obj.AllowedPositions; % Use allowed positions for drawing
-
             % Draw the positions
-            for i = 1:size(positions, 1)
-                obj.BoardPlot = plot(positions(i, 1), positions(i, 2), 'ko', 'MarkerSize', 20, 'MarkerFaceColor', '#808080','ButtonDownFcn',@(src,event,obj) obj.onClick(src,event,obj));
-            end
+            obj.BoardPlot = plot(obj.AllowedPositions(:,1),obj.AllowedPositions(:,2),'ko','MarkerSize',20,'MarkerFaceColor', '#808080');
+            set(obj.BoardPlot,'ButtonDownFcn', @(src,event) obj.onClick(src,event));
             
             % Draw the lines connecting the points
             lineCoordinatesX = [1, 1, 7, 7, 1];
@@ -318,10 +317,11 @@ classdef boardNMMClass
             fprintf('Player 2 Score: %d\n', obj.Score(2));
         end
 
-        function onClick(obj, src, ~)
-            obj.MoveX = src.XData;
-            obj.MoveY = src.YData;
-            obj.gameRun();
+        function obj = onClick(obj, ~, event)
+            obj.MoveX = event.IntersectionPoint(1);
+            obj.MoveY = event.IntersectionPoint(2);
+            obj = obj.gameRun();
         end
+
     end
 end

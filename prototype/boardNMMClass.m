@@ -9,6 +9,7 @@ classdef boardNMMClass < handle
         MaxPieces = 9; % Maximum pieces per player
         Phase % Current phase of the game (1 for placing, 2 for moving, 3 for mill)
         isEndOfPhase1 % Flag to signify end of Phase 1 and to never come back to it
+        adjacencyList % List of adjacent positions
         isMovingX % X coordinate of piece to be moved
         isMovingY % Y coordinate of piece to be moved
         isMoving % Flag to signify if piece to be moved has been chosen
@@ -34,6 +35,32 @@ classdef boardNMMClass < handle
             obj.AllowedPositions = [1, 1; 1, 4; 1, 7; 4, 1; 4, 7; 7, 1; 7, 4; 7, 7;
                                                  2, 2; 2, 4; 2, 6; 4, 2; 4, 6; 6, 2; 6, 4; 6, 6;
                                                  3, 3; 3, 4; 3, 5; 4, 3; 4, 5; 5, 3; 5, 4; 5, 5];
+            % Define adjacency for each position
+            obj.adjacencyList = containers.Map('KeyType', 'char', 'ValueType', 'any');
+            obj.adjacencyList('1,1') = {[1, 4], [4, 1]}; % Corner
+            obj.adjacencyList('1,4') = {[1, 1], [1, 7], [2, 4]}; % Edge
+            obj.adjacencyList('1,7') = {[1, 4], [4, 7]}; % Corner
+            obj.adjacencyList('4,1') = {[1, 1], [4, 2], [7, 1]}; % Edge
+            obj.adjacencyList('4,7') = {[4, 6], [1, 7], [7, 7]}; % Edge
+            obj.adjacencyList('7,1') = {[4, 1], [7, 4]}; % Corner
+            obj.adjacencyList('7,4') = {[7, 1], [7, 7], [6, 4]}; % Edge
+            obj.adjacencyList('7,7') = {[7, 4], [4, 7]}; % Corner
+            obj.adjacencyList('2,2') = {[2, 4], [4, 2]}; % Corner
+            obj.adjacencyList('2,4') = {[1, 4], [2, 2], [2, 6], [3, 4]}; % Edge
+            obj.adjacencyList('2,6') = {[2, 4], [4, 6]}; % Corner
+            obj.adjacencyList('4,2') = {[2, 2], [4, 1], [4, 3], [6, 2]}; % Edge
+            obj.adjacencyList('4,6') = {[4, 5], [2, 6], [6, 6], [4, 7]}; % Edge
+            obj.adjacencyList('6,2') = {[4, 2], [6, 4]}; % Corner
+            obj.adjacencyList('6,4') = {[6, 2], [6, 6], [5, 4], [7, 4]}; % Edge
+            obj.adjacencyList('6,6') = {[6, 4], [4, 6]}; % Corner
+            obj.adjacencyList('3,3') = {[3, 4], [4, 3]}; % Corner
+            obj.adjacencyList('3,4') = {[3, 3], [3, 5], [2, 4]}; % Edge
+            obj.adjacencyList('3,5') = {[3, 4], [4, 5]}; % Corner
+            obj.adjacencyList('4,3') = {[3, 3], [4, 2], [5, 3]}; % Edge
+            obj.adjacencyList('4,5') = {[4, 6], [3, 5], [5, 5]}; % Edge
+            obj.adjacencyList('5,3') = {[4, 3], [5, 4]}; % Corner
+            obj.adjacencyList('5,4') = {[5, 3], [5, 5], [6, 4]}; % Edge
+            obj.adjacencyList('5,5') = {[5, 4], [4, 5]}; % Corner
 
             obj = obj.initialDraw(); % Initiate the visualization
         end
@@ -41,30 +68,10 @@ classdef boardNMMClass < handle
         %% Main game function that runs the game
         function obj = gameRun(obj)
             if ~obj.isGameOver % While game is not over
-                if obj.Phase == 1 % Phase 1 is placing pieces
-                    obj = obj.placePiece(obj.MoveX,obj.MoveY); % Place the piece
-                   
-                    % Check if the current player has formed a mill
-                    if obj.checkForMill(obj.CurrentTurn,obj.MoveX,obj.MoveY)
-                        % Change Phase flag to mill
-                        obj.Phase = 3;
-                        obj.refreshBoard();
-                        return
-                    end
-    
-                    % Check for end of phase
-                    if sum(obj.PlayerPieces) == obj.MaxPieces*2
-                        obj.Phase = 2; % Switch to moving phase
-                        obj.isEndOfPhase1 = true;
-                        disp('All pieces have been placed. Now entering the moving phase.');
-                    end
-                    obj.CurrentTurn = 3- obj.CurrentTurn;
-
-                elseif obj.Phase == 2 % Phase 2 is movement
-                    if obj.isMoving
-                        obj = obj.makeMove(obj.isMovingX, obj.isMovingY, obj.MoveX,obj.MoveY);
-                        obj.isMoving = false;
-
+                switch obj.Phase 
+                    case 1 % Phase 1 is placing pieces
+                        obj = obj.placePiece(obj.MoveX,obj.MoveY); % Place the piece
+                       
                         % Check if the current player has formed a mill
                         if obj.checkForMill(obj.CurrentTurn,obj.MoveX,obj.MoveY)
                             % Change Phase flag to mill
@@ -72,61 +79,98 @@ classdef boardNMMClass < handle
                             obj.refreshBoard();
                             return
                         end
-                    
-                        % Check for losing condition
-                        if obj.PlayerPieces(3-obj.CurrentTurn) <= 2
-                            fprintf('Player %d has lost the game!',3-obj.CurrentTurn);
-                            obj.isGameOver = true;
-                        end
-                    else
-                        obj.isMovingX = obj.MoveX;
-                        obj.isMovingY = obj.MoveY;
-                        obj.isMoving = true;
-                    end
-                    obj.CurrentTurn = 3- obj.CurrentTurn;
-
-                elseif obj.Phase == 3 % Phase 3 is mill
-                    % Get the positions of the opponent's pieces assuming 1 and 2
-                    % in BoardState are player pieces
         
-                    opponentPieces = obj.BoardState == 3 - obj.CurrentTurn; 
-                    if isempty(opponentPieces)
-                        disp('No opponent pieces to remove.');
-                        if obj.isEndOfPhase1
-                            obj.Phase = 2;
-                        else
-                            obj.Phase = 1;
+                        % Check for end of phase
+                        if sum(obj.PlayerPieces,"all") == obj.MaxPieces*2
+                            obj.Phase = 2; % Switch to moving phase
+                            obj.isEndOfPhase1 = true;
+                            disp('All pieces have been placed. Now entering the moving phase.');
                         end
-                        return; % No pieces to remove
-                    end
+                        obj.CurrentTurn = 3- obj.CurrentTurn;
 
-                    % Validate the selection
-                    if obj.BoardState(obj.MoveX,obj.MoveY) == 3- obj.CurrentTurn
-                        if ~obj.checkForMill(3-obj.CurrentTurn, obj.MoveX, obj.MoveY)
-                            % Remove the piece from the board
-                            obj.BoardState(obj.MoveX,obj.MoveY) = 0; % Assuming 0 means empty
-                            obj.PlayerPieces(3-obj.CurrentTurn,find(obj.PlayerPieces(3-obj.CurrentTurn,:)==1,1,'last')) = [];
+                    case 2 % Phase 2 is movement
+                        if obj.isMoving
+                            if obj.isValidMove(obj.isMovingX, obj.isMovingY, obj.MoveX, obj.MoveY)
+                                obj = obj.makeMove(obj.isMovingX, obj.isMovingY, obj.MoveX,obj.MoveY);
+                                obj.isMoving = false;
+        
+                                % Check if the current player has formed a mill
+                                if obj.checkForMill(obj.CurrentTurn,obj.MoveX,obj.MoveY)
+                                    % Change Phase flag to mill
+                                    obj.Phase = 3;
+                                    obj.refreshBoard();
+                                    return
+                                end
+                            else
+                                fprintf('Invalid selection. Please select a valid position to move to.\n');
+                                return; % Exit if the selection is invalid
+                            end
+                        else
+                            % Check if the selected piece is valid to move
+                            if obj.BoardState(obj.MoveX,obj.MoveY) == obj.CurrentTurn
+                                if obj.isValidMove(obj.MoveX, obj.MoveY)
+                                    obj.isMovingX = obj.MoveX;
+                                    obj.isMovingY = obj.MoveY;
+                                    obj.isMoving = true;
+                                    return;
+                                else
+                                    fprintf('Invalid selection. Please select a valid piece to move.\n');
+                                    return; % Exit if the selection is invalid
+                                end
+                            else
+                                fprintf('Invalid selection. Please select a valid piece to move.\n');
+                                return; % Exit if the selection is invalid
+                            end
+                        end
+                        obj.CurrentTurn = 3- obj.CurrentTurn;
+
+                    case 3 % Phase 3 is mill
+                        % Get the positions of the opponent's pieces assuming 1 and 2
+                        % in BoardState are player pieces
+            
+                        opponentPieces = obj.BoardState == 3 - obj.CurrentTurn; 
+                        if isempty(opponentPieces)
+                            disp('No opponent pieces to remove.');
+                            if obj.isEndOfPhase1
+                                obj.Phase = 2;
+                            else
+                                obj.Phase = 1;
+                            end
+                            return; % No pieces to remove
+                        end
+    
+                        % Validate the selection
+                        if obj.BoardState(obj.MoveX,obj.MoveY) == 3- obj.CurrentTurn
+                            if ~obj.checkForMill(3-obj.CurrentTurn, obj.MoveX, obj.MoveY)
+                                % Remove the piece from the board
+                                obj.BoardState(obj.MoveX,obj.MoveY) = 0; % Assuming 0 means empty
+                                
+                                % Check for losing condition
+                                if obj.isEndOfPhase1 && sum(opponentPieces,'all') < 3
+                                    fprintf('Player %d has lost the game!',3-obj.CurrentTurn);
+                                    obj.isGameOver = true;
+                                    obj.Score(:,obj.CurrentTurn) =+ 1;
+                                    obj.displayScore();
+                                else
+                                    % Come back to correct Phase
+                                    if obj.isEndOfPhase1
+                                        obj.Phase = 2;
+                                    else
+                                        obj.Phase = 1;
+                                    end
+                                    obj.CurrentTurn = 3- obj.CurrentTurn;
+                                end
+                            else
+                                disp('Invalid selection. Please choose a valid piece.');
+                                return % Invalid piece chosen, don't change anything
+                            end
                         else
                             disp('Invalid selection. Please choose a valid piece.');
                             return % Invalid piece chosen, don't change anything
                         end
-                    else
-                        disp('Invalid selection. Please choose a valid piece.');
-                        return % Invalid piece chosen, don't change anything
-                    end
-
-                    % Come back to correct Phase
-                    if obj.isEndOfPhase1
-                        obj.Phase = 2;
-                    else
-                        obj.Phase = 1;
-                    end
-                    obj.CurrentTurn = 3- obj.CurrentTurn;
-
                 end
                 obj = obj.refreshBoard();
             else
-                displayScore(obj)
                 obj.resetGame();
             end
         end
@@ -137,10 +181,10 @@ classdef boardNMMClass < handle
                 % Placing phase
                 if ismember([row, col], obj.AllowedPositions, 'rows') % Check if the cell is allowed
                     if obj.BoardState(row, col) == 0 % Check if the cell is empty
-                        if obj.CurrentTurn == 1 && sum(obj.PlayerPieces(obj.CurrentTurn,:)) <= obj.MaxPieces
+                        if obj.CurrentTurn == 1 && sum(obj.PlayerPieces(obj.CurrentTurn,:)) < obj.MaxPieces
                             obj.BoardState(row, col) = obj.CurrentTurn; % Place Player 1's piece
                             obj.PlayerPieces(obj.CurrentTurn,sum(obj.PlayerPieces(obj.CurrentTurn,:))+1) = 1; % Mark piece as used
-                        elseif obj.CurrentTurn == 2 && sum(obj.PlayerPieces(obj.CurrentTurn,:)) <= obj.MaxPieces
+                        elseif obj.CurrentTurn == 2 && sum(obj.PlayerPieces(obj.CurrentTurn,:)) < obj.MaxPieces
                             obj.BoardState(row, col) = obj.CurrentTurn; % Place Player 2's piece
                             obj.PlayerPieces(obj.CurrentTurn,sum(obj.PlayerPieces(obj.CurrentTurn,:))+1) = 1; % Mark piece as used
                         else
@@ -155,8 +199,6 @@ classdef boardNMMClass < handle
             else
                 disp('Invalid game phase.');
             end
-            % Switch turns
-            obj = obj.refreshBoard();
         end
         
         %% Making moves
@@ -175,13 +217,8 @@ classdef boardNMMClass < handle
                 else
                     if ismember([moveToX, moveToY], obj.AllowedPositions, 'rows') % Check if the target cell is allowed
                         if obj.BoardState(moveToX, moveToY) == 0 % Check if the target cell is empty
-                            if obj.isValidMove(moveFromX, moveFromY, moveToX, moveToY) % Check if the move is valid
-                                obj.BoardState(moveToX, moveToY) = obj.CurrentTurn; % Move the piece
-                                obj.BoardState(moveFromX, moveFromY) = 0; % Clear the old position
-                            else
-                                disp('Invalid move. You can only move to connected non-occupied positions.');
-                                return;
-                            end
+                            obj.BoardState(moveToX, moveToY) = obj.CurrentTurn; % Move the piece
+                            obj.BoardState(moveFromX, moveFromY) = 0; % Clear the old position
                         else
                             disp('Target cell is already occupied.');
                             return;
@@ -246,49 +283,30 @@ classdef boardNMMClass < handle
                 end
         end
 
-        function valid = isValidMove(startRow, startCol, targetRow, targetCol)
-            % Define adjacency for each position
-            adjacencyList = containers.Map('KeyType', 'char', 'ValueType', 'any');
-            adjacencyList('1,1') = {[1, 4], [4, 1]}; % Corner
-            adjacencyList('1,4') = {[1, 1], [1, 7], [2, 4]}; % Edge
-            adjacencyList('1,7') = {[1, 4], [4, 7]}; % Corner
-            adjacencyList('4,1') = {[1, 1], [4, 2], [7, 1]}; % Edge
-            adjacencyList('4,7') = {[4, 6], [1, 7], [7, 7]}; % Edge
-            adjacencyList('7,1') = {[4, 1], [7, 4]}; % Corner
-            adjacencyList('7,4') = {[7, 1], [7, 7], [6, 4]}; % Edge
-            adjacencyList('7,7') = {[7, 4], [4, 7]}; % Corner
-            adjacencyList('2,2') = {[2, 4], [4, 2]}; % Corner
-            adjacencyList('2,4') = {[1, 4], [2, 2], [2, 6], [3, 4]}; % Edge
-            adjacencyList('2,6') = {[2, 4], [4, 6]}; % Corner
-            adjacencyList('4,2') = {[2, 2], [4, 1], [4, 3], [6, 2]}; % Edge
-            adjacencyList('4,6') = {[4, 5], [2, 6], [6, 6], [4, 7]}; % Edge
-            adjacencyList('6,2') = {[4, 2], [6, 4]}; % Corner
-            adjacencyList('6,4') = {[6, 2], [6, 6], [5, 4], [7, 4]}; % Edge
-            adjacencyList('6,6') = {[6, 4], [4, 6]}; % Corner
-            adjacencyList('3,3') = {[3, 4], [4, 3]}; % Corner
-            adjacencyList('3,4') = {[3, 3], [3, 5], [2, 4]}; % Edge
-            adjacencyList('3,5') = {[3, 4], [4, 5]}; % Corner
-            adjacencyList('4,3') = {[3, 3], [4, 2], [5, 3]}; % Edge
-            adjacencyList('4,5') = {[4, 6], [3, 5], [5, 5]}; % Edge
-            adjacencyList('5,3') = {[4, 3], [5, 4]}; % Corner
-            adjacencyList('5,4') = {[5, 3], [5, 5], [6, 4]}; % Edge
-            adjacencyList('5,5') = {[5, 4], [4, 5]}; % Corner
-        
-            % Check if the target position is in the adjacency list of the start position
-            startKey = sprintf('%d,%d', startRow, startCol);
-            targetKey = sprintf('%d,%d', targetRow, targetCol);
-        
-            if isKey(adjacencyList, startKey)
-                validMovesFromStart = adjacencyList(startKey);
-                valid = any(cellfun(@(x) isequal(x, targetKey), validMovesFromStart));
-            else
-                valid = false; % Invalid start position
-            end
-        end
+        function valid = isValidMove(obj, startRow, startCol, targetRow, targetCol)
+            % Check the number of input arguments
+            if nargin == 3
+                % If only 3 arguments are provided, assume checking if
+                % adjacent positions are empty
+                startKey = sprintf('%d,%d', startRow, startCol);
 
-        function obj = updateScore(obj)
-            % Example scoring logic (modify as needed)
-            obj.Score(obj.CurrentTurn) = obj.Score(obj.CurrentTurn) + 1;
+                % Check if there are empty adjacent positions to the chosen piece
+                valid = any(cellfun(@(x) obj.BoardState(x(1), x(2)) == 0, obj.adjacencyList(startKey)));
+            else
+                if sum(obj.BoardState(:) == obj.CurrentTurn) > 3
+                    valid = true;
+                else
+                    % Check if the target position is in the adjacency list of the start position
+                    startKey = sprintf('%d,%d', startRow, startCol);
+                    targetKey = [targetRow, targetCol];
+                
+                    if isKey(obj.adjacencyList, startKey)
+                        valid = any(cellfun(@(x) isequal(x, targetKey), obj.adjacencyList(startKey)));
+                    else
+                        valid = false; % Invalid start position
+                    end
+                end
+            end
         end
 
         function obj = initialDraw(obj)
@@ -383,10 +401,8 @@ classdef boardNMMClass < handle
         function obj = resetGame(obj)
             % Reset the game state for a new game
             obj.BoardState = zeros(7, 7);
-            obj.PlayerPieces = zeros(1, obj.MaxPieces);
-            obj.Player2Pieces = zeros(1, obj.MaxPieces);
+            obj.PlayerPieces = zeros(2, obj.MaxPieces);
             obj.CurrentTurn = 1;
-            obj.Score = [0, 0];
             obj.Phase = 1;
             obj.initialDraw();
         end
